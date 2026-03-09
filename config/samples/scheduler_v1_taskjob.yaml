@@ -1,0 +1,9 @@
+apiVersion: scheduler.cloudos.io/v1
+kind: TaskJob
+metadata:
+  labels:
+    app.kubernetes.io/name: cloudos-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: taskjob-sample
+spec:
+  # TODO(user): Add fields here
