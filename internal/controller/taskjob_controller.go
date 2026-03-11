@@ -30,7 +30,6 @@ type TaskJobReconciler struct {
 func (r *TaskJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// 1. Fetch TaskJob
 	var taskJob schedulerv1.TaskJob
 	if err := r.Get(ctx, req.NamespacedName, &taskJob); err != nil {
 		if errors.IsNotFound(err) {
@@ -41,13 +40,11 @@ func (r *TaskJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	logger.Info("Reconciling TaskJob", "name", taskJob.Name, "phase", taskJob.Status.Phase)
 
-	// 2. Skip terminal tasks
 	if taskJob.Status.Phase == schedulerv1.PhaseCompleted ||
 		taskJob.Status.Phase == schedulerv1.PhaseFailed {
 		return ctrl.Result{}, nil
 	}
 
-	// 3. Check dependencies
 	depsOk, err := r.checkDependencies(ctx, &taskJob)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -55,34 +52,46 @@ func (r *TaskJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if !depsOk {
 		taskJob.Status.Phase = schedulerv1.PhaseQueued
 		taskJob.Status.Message = "Waiting for dependencies"
-		r.Status().Update(ctx, &taskJob)
+		if err := r.Status().Update(ctx, &taskJob); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// 4. Find existing pod
 	existingPod, err := r.findPod(ctx, &taskJob)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// 5. No pod yet — create one
 	if existingPod == nil {
+		if taskJob.Spec.Image == "" {
+			taskJob.Status.Phase = schedulerv1.PhaseFailed
+			taskJob.Status.Message = "No image specified"
+			if err := r.Status().Update(ctx, &taskJob); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
 		pod := r.buildPod(&taskJob)
 		if err := r.Create(ctx, pod); err != nil {
 			logger.Error(err, "Failed to create Pod")
 			taskJob.Status.Phase = schedulerv1.PhaseFailed
 			taskJob.Status.Message = fmt.Sprintf("Pod creation failed: %v", err)
-			r.Status().Update(ctx, &taskJob)
+			if err := r.Status().Update(ctx, &taskJob); err != nil {
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
 		logger.Info("Created pod", "pod", pod.Name)
 		taskJob.Status.Phase = schedulerv1.PhaseRunning
 		taskJob.Status.PodName = pod.Name
-		r.Status().Update(ctx, &taskJob)
+		if err := r.Status().Update(ctx, &taskJob); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// 6. Sync status from pod
 	return r.syncStatus(ctx, &taskJob, existingPod)
 }
 
@@ -126,13 +135,14 @@ func (r *TaskJobReconciler) buildPod(tj *schedulerv1.TaskJob) *corev1.Pod {
 		memReq = "256Mi"
 	}
 
-	envVars := []corev1.EnvVar{
-		{Name: "CLOUDOS_TASK_ID", Value: tj.Name},
-		{Name: "CLOUDOS_NAMESPACE", Value: tj.Namespace},
-		{Name: "CLOUDOS_PRIORITY", Value: string(tj.Spec.Priority)},
-		{Name: "CLOUDOS_ALGORITHM", Value: string(tj.Spec.Algorithm)},
-		{Name: "REDIS_URL", Value: "redis://redis-svc:6379"},
-	}
+	envVars := make([]corev1.EnvVar, 0, len(tj.Spec.Env)+5)
+	envVars = append(envVars,
+		corev1.EnvVar{Name: "CLOUDOS_TASK_ID",   Value: tj.Name},
+		corev1.EnvVar{Name: "CLOUDOS_NAMESPACE", Value: tj.Namespace},
+		corev1.EnvVar{Name: "CLOUDOS_PRIORITY",  Value: string(tj.Spec.Priority)},
+		corev1.EnvVar{Name: "CLOUDOS_ALGORITHM", Value: string(tj.Spec.Algorithm)},
+		corev1.EnvVar{Name: "REDIS_URL",         Value: "redis://redis-svc:6379"},
+	)
 	for _, e := range tj.Spec.Env {
 		envVars = append(envVars, corev1.EnvVar{Name: e.Name, Value: e.Value})
 	}
@@ -170,7 +180,9 @@ func (r *TaskJobReconciler) buildPod(tj *schedulerv1.TaskJob) *corev1.Pod {
 		},
 	}
 
-	controllerutil.SetControllerReference(tj, pod, r.Scheme)
+	if err := controllerutil.SetControllerReference(tj, pod, r.Scheme); err != nil {
+		return pod
+	}
 	return pod
 }
 
@@ -182,7 +194,9 @@ func (r *TaskJobReconciler) syncStatus(ctx context.Context, tj *schedulerv1.Task
 		if tj.Status.StartTime == "" {
 			tj.Status.StartTime = time.Now().Format(time.RFC3339)
 		}
-		r.Status().Update(ctx, tj)
+		if err := r.Status().Update(ctx, tj); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 
 	case corev1.PodSucceeded:
@@ -190,20 +204,26 @@ func (r *TaskJobReconciler) syncStatus(ctx context.Context, tj *schedulerv1.Task
 		tj.Status.EndTime = time.Now().Format(time.RFC3339)
 		tj.Status.Message = "Task completed successfully"
 		tj.Status.ExitCode = 0
-		r.Status().Update(ctx, tj)
+		if err := r.Status().Update(ctx, tj); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 
 	case corev1.PodFailed:
 		tj.Status.Phase = schedulerv1.PhaseFailed
 		tj.Status.EndTime = time.Now().Format(time.RFC3339)
 		tj.Status.Message = "Pod failed"
-		r.Status().Update(ctx, tj)
+		if err := r.Status().Update(ctx, tj); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 
 	case corev1.PodPending:
 		tj.Status.Phase = schedulerv1.PhaseQueued
 		tj.Status.Message = "Pod pending scheduling"
-		r.Status().Update(ctx, tj)
+		if err := r.Status().Update(ctx, tj); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
