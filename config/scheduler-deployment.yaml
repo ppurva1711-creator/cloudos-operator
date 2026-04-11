@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudos-scheduler
+  namespace: cloudos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudos-scheduler
+  template:
+    metadata:
+      labels:
+        app: cloudos-scheduler
+    spec:
+      containers:
+      - name: scheduler
+        image: cloudos-scheduler:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: REDIS_URL
+          value: "redis://redis-svc:6379"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scheduler-svc
+  namespace: cloudos
+spec:
+  selector:
+    app: cloudos-scheduler
+  ports:
+  - port: 8000
+    targetPort: 8000
