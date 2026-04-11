@@ -50,7 +50,6 @@ class MLFQueue:
     def stats(self):
         return {f"level_{i}": len(q) for i, q in enumerate(self.queues)}
 
-
 class RoundRobinScheduler:
     QUANTUM = 5
 
@@ -75,7 +74,6 @@ class RoundRobinScheduler:
     def stats(self):
         return {"queue_size": len(self.queue)}
 
-
 class SJFScheduler:
     def __init__(self):
         self.queue: List[Task] = []
@@ -90,7 +88,6 @@ class SJFScheduler:
     def stats(self):
         return {"queue_size": len(self.queue)}
 
-
 class FIFOScheduler:
     def __init__(self):
         self.queue: List[Task] = []
@@ -103,7 +100,6 @@ class FIFOScheduler:
 
     def stats(self):
         return {"queue_size": len(self.queue)}
-
 
 def get_scheduler(algorithm: str):
     return {
