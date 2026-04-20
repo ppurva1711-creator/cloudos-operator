@@ -1,0 +1,81 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-rolebinding
+  namespace: ${TENANT_NAMESPACE}  # Replace with tenant namespace (e.g., tenant-a)
+  labels:
+    app: cloudtask
+    component: tenant-rbac
+    managed-by: cloudtask-operator
+    tenant-id: "${TENANT_NAME}"  # Replace with tenant ID
+  annotations:
+    description: "RoleBinding linking tenant-role to tenant ServiceAccount in ${TENANT_NAMESPACE} namespace"
+    created-by: "cloudtask-orchestrator"
+    version: "v1.0.0"
+
+roleRef:
+  # Reference to the Role this RoleBinding applies
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tenant-role  # Must match Role metadata.name
+
+subjects:
+  # ServiceAccounts that get the permissions from the Role
+  - kind: ServiceAccount
+    name: tenant-${TENANT_NAME}  # ServiceAccount name (e.g., tenant-a)
+    namespace: ${TENANT_NAMESPACE}  # ServiceAccount namespace (must match Role namespace)
+
+---
+# OPTIONAL: Additional RoleBindings for specific use cases
+# Uncomment if you need to grant permissions to specific users or groups
+
+# ==========================================
+# RoleBinding for Tenant Admins (Optional)
+# Allows specific users to have admin access to tenant namespace
+# ==========================================
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: RoleBinding
+# metadata:
+#   name: tenant-admin-rolebinding
+#   namespace: ${TENANT_NAMESPACE}
+#   labels:
+#     app: cloudtask
+#     component: tenant-rbac
+#     role: admin
+#     tenant-id: "${TENANT_NAME}"
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: ClusterRole
+#   name: admin  # Built-in Kubernetes admin role
+# subjects:
+#   # Add your tenant admins here
+#   - kind: User
+#     name: "tenant-admin@company.com"  # Replace with actual user
+#     apiGroup: rbac.authorization.k8s.io
+#   - kind: Group
+#     name: "${TENANT_NAME}-admins"  # Replace with actual group
+#     apiGroup: rbac.authorization.k8s.io
+
+---
+# ==========================================
+# RoleBinding for Tenant Developers (Optional)
+# Lower permissions for developers (read-only access)
+# ==========================================
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: RoleBinding
+# metadata:
+#   name: tenant-developer-rolebinding
+#   namespace: ${TENANT_NAMESPACE}
+#   labels:
+#     app: cloudtask
+#     component: tenant-rbac
+#     role: developer
+#     tenant-id: "${TENANT_NAME}"
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: Role
+#   name: tenant-developer-role  # Would need to create a separate role with read-only perms
+# subjects:
+#   - kind: Group
+#     name: "${TENANT_NAME}-developers"
+#     apiGroup: rbac.authorization.k8s.io

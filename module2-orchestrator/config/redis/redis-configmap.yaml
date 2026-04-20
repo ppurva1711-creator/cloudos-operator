@@ -1,0 +1,213 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: module2-system
+  labels:
+    app: redis
+    component: configuration
+    managed-by: cloudtask-operator
+    version: "7.2"
+  annotations:
+    description: "Redis server configuration with AOF persistence and LRU eviction"
+    created-date: "2026-04-19"
+
+data:
+  redis.conf: |
+    ################################ GENERAL #################################
+    
+    # Bind to all network interfaces (required for K8s networking)
+    bind 0.0.0.0
+    
+    # Accept connections on IPv6 as well
+    # bind-addr-6 ::
+    
+    # TCP listen() backlog setting
+    tcp-backlog 511
+    
+    # Set server verbosity to 'debug' (no background logs)
+    # loglevel debug
+    loglevel notice
+    
+    # TCP keepalive setting (300 seconds)
+    tcp-keepalive 300
+    
+    # By default, Redis user is 'local'. Don't daemonize in K8s
+    daemonize no
+    
+    # Specify the server verbosity level
+    pidfile /var/run/redis.pid
+    
+    ################################ SNAPSHOTTING (RDB Persistence) #################################
+    
+    # Save the DB on disk with RDB format
+    # save <seconds> <changes>
+    # Will save the DB if both the given number of seconds and the given number of write operations
+    
+    # Save after 900 sec (15 min) if at least 1 key changed
+    save 900 1
+    
+    # Save after 300 sec (5 min) if at least 10 keys changed
+    save 300 10
+    
+    # Save after 60 sec if at least 10000 keys changed
+    save 60 10000
+    
+    # By default Redis will stop accepting writes if RDB snapshots are enabled and the latest background
+    # save failed
+    stop-writes-on-bgsave-error yes
+    
+    # Compress string objects using LZF when dump .rdb databases
+    rdbcompression yes
+    
+    # Checksum the RDB file is placed at the end
+    rdbchecksum yes
+    
+    # The filename for the RDB file
+    dbfilename dump.rdb
+    
+    # The working directory. 
+    dir /data
+    
+    ################################ REPLICATION #################################
+    
+    # Single node, no replication configured
+    # In production, configure as needed
+    
+    ################################ SECURITY #################################
+    
+    # Require a password to use the server
+    # requirepass will be injected from the secret at deployment time
+    # (set via environment variable in deployment)
+    
+    # Enable protected mode to require authentication
+    protected-mode yes
+    
+    ################################ CLIENTS #################################
+    
+    # Set the max number of connected clients
+    # maxclients 10000
+    
+    ################################ MEMORY MANAGEMENT #################################
+    
+    # Set a memory usage limit (512MB for K8s pod)
+    maxmemory 512mb
+    
+    # Memory eviction policy: remove least recently used keys
+    # Policies: noeviction | allkeys-lru | allkeys-lfu | volatile-lru | volatile-lfu | volatile-ttl | volatile-random | allkeys-random
+    maxmemory-policy allkeys-lru
+    
+    ################################ LAZY FREEING ################################
+    
+    # Redis server free and reclaim memory
+    lazyfree-lazy-eviction no
+    lazyfree-lazy-expire no
+    lazyfree-lazy-server-del no
+    replica-lazy-flush no
+    
+    ################################ THREADED I/O #################################
+    
+    # io-threads 4
+    # io-threads-do-reads no
+    
+    ################################ PERSISTENCE #################################
+    
+    # AOF (Append Only File) persistence
+    appendonly yes
+    
+    # AOF file name
+    appendfilename "appendonly.aof"
+    
+    # AOF fsync policy:
+    # - always: fsync every write
+    # - everysec: fsync every second (balance between speed and durability)
+    # - no: let OS handle fsync
+    appendfsync everysec
+    
+    # Perform fsync during rewrites
+    no-appendfsync-on-rewrite no
+    
+    # Auto AOF rewrite settings
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    
+    # AOF file format version 1
+    aof-use-rdb-preamble yes
+    
+    ################################ LUA SCRIPTING  #################################
+    
+    # Max execution time for scripts (milliseconds)
+    lua-time-limit 5000
+    
+    ################################ REDIS CLUSTER #################################
+    
+    # Single node mode, no clustering
+    # cluster-enabled no
+    
+    ################################ SLOW LOG #################################
+    
+    # Microseconds threshold for slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    
+    ################################ MONITOR #################################
+    
+    # By default MONITOR is disabled (security)
+    # MONITOR can be used to monitor all commands
+    
+    ################################ TIME SERIES #################################
+    
+    # Timeout to close idle client connections (0 = never timeout)
+    timeout 0
+    
+    ################################ ADVANCED CONFIG #################################
+    
+    # Heuristic for pool size
+    hash-table-hash-field-max-listpack-length 512
+    
+    # Threshold for active defrag
+    active-defrag-threshold-lower 10
+    active-defrag-threshold-upper 100
+    
+    # Latency monitoring threshold (seconds, 0 = disabled)
+    latency-monitor-threshold 0
+    
+    # Notification settings for keyspace events
+    # (leave empty to disable)
+    notify-keyspace-events ""
+    
+    ################################ KERNEL OOM CONTROL ################################
+    
+    oom-score-adj no
+    
+    ################################ KERNEL TRANSPARENT HUGEPAGE ################################
+    
+    disable-thp yes
+
+---
+# ConfigMap for Redis Health Check Script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-health-scripts
+  namespace: module2-system
+  labels:
+    app: redis
+    component: health-check
+    managed-by: cloudtask-operator
+
+data:
+  # Health check script for Redis
+  health-check.sh: |
+    #!/bin/sh
+    set -e
+    
+    # Extract password from environment
+    REDIS_PASSWORD="${REDIS_PASSWORD}"
+    
+    # Try to connect and ping
+    if [ -z "$REDIS_PASSWORD" ]; then
+      redis-cli -h localhost ping
+    else
+      redis-cli -h localhost -a "$REDIS_PASSWORD" ping
+    fi

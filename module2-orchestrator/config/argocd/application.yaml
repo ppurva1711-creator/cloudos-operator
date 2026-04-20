@@ -1,0 +1,113 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cloudtask
+  namespace: argocd
+spec:
+  description: CloudTask Orchestrator Application Project
+  sourceRepos:
+  - 'https://github.com/orchestrator/*'
+  destinations:
+  - namespace: 'orchestrator-system'
+    server: https://kubernetes.default.svc
+  - namespace: 'default'
+    server: https://kubernetes.default.svc
+  - namespace: 'monitoring'
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: PersistentVolume
+  - group: '*'
+    kind: ClusterRole
+  - group: '*'
+    kind: ClusterRoleBinding
+  - group: '*'
+    kind: CustomResourceDefinition
+  - group: '*'
+    kind: Namespace
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudtask-operator
+  namespace: argocd
+spec:
+  project: cloudtask
+  source:
+    repoURL: https://github.com/orchestrator/module2-orchestrator
+    targetRevision: main
+    path: config/operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orchestrator-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  revisionHistoryLimit: 10
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudtask-crd
+  namespace: argocd
+spec:
+  project: cloudtask
+  source:
+    repoURL: https://github.com/orchestrator/module2-orchestrator
+    targetRevision: main
+    path: config/crd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+  revisionHistoryLimit: 10
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudtask-rbac
+  namespace: argocd
+spec:
+  project: cloudtask
+  source:
+    repoURL: https://github.com/orchestrator/module2-orchestrator
+    targetRevision: main
+    path: config/rbac
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orchestrator-system
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+  revisionHistoryLimit: 10
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudtask-monitoring
+  namespace: argocd
+spec:
+  project: cloudtask
+  source:
+    repoURL: https://github.com/orchestrator/module2-orchestrator
+    targetRevision: main
+    path: config/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  revisionHistoryLimit: 10

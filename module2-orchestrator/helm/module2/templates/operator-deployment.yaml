@@ -1,0 +1,118 @@
+{{- if .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "module2.fullname" . }}-operator
+  namespace: {{ include "module2.namespace" . }}
+  labels:
+    {{- include "module2.labels" . }}
+    app: cloudtask-operator
+    component: operator
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "module2.selectorLabels" . }}
+      app: cloudtask-operator
+  template:
+    metadata:
+      labels:
+        {{- include "module2.selectorLabels" . }}
+        app: cloudtask-operator
+        component: operator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.operator.service.metricsPort }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- if .Values.operator.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.operator.podSecurityContext | nindent 8 }}
+      {{- end }}
+      
+      serviceAccountName: {{ include "module2.serviceAccountName" . }}
+      
+      containers:
+      - name: operator
+        image: {{ include "module2.operator.image" . }}
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        
+        ports:
+        - name: metrics
+          containerPort: {{ .Values.operator.service.metricsPort }}
+          protocol: TCP
+        - name: health
+          containerPort: {{ .Values.operator.service.healthPort }}
+          protocol: TCP
+        
+        env:
+        {{- range $key, $value := .Values.operator.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        - name: REDIS_ADDR
+          value: "redis.module2-system:6379"
+        - name: POSTGRES_HOST
+          value: "postgresql.module2-system"
+        - name: POSTGRES_PORT
+          value: "5432"
+        
+        {{- if .Values.redis.enabled }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis
+              key: redis-password
+        {{- end }}
+        
+        {{- if .Values.postgresql.enabled }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql
+              key: password
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql
+              key: username
+        {{- end }}
+        
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+        
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      
+      {{- if .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.operator.nodeSelector | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.operator.affinity }}
+      affinity:
+        {{- toYaml .Values.operator.affinity | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml .Values.operator.tolerations | nindent 8 }}
+      {{- end }}
+      
+      terminationGracePeriodSeconds: 30
+{{- end }}

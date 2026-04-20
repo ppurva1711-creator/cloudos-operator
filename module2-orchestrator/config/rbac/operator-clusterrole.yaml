@@ -1,0 +1,290 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudtask-operator-role
+  labels:
+    app: cloudtask
+    component: operator
+    managed-by: cloudtask-operator
+    version: "v1.0.0"
+  annotations:
+    description: "ClusterRole for CloudTask Operator - allows operator to manage CloudTasks and infrastructure across all namespaces"
+    created-by: "cloudtask-orchestrator"
+    rbac-scope: "cluster-wide"
+
+rules:
+# ==========================================
+# RULE 1: CloudTask CRD Management (Cluster-wide)
+# Allow operator to manage CloudTasks in all namespaces
+# ==========================================
+- apiGroups:
+  - "tasks.orchestrator.dev"
+  resources:
+  - "cloudtasks"
+  - "cloudtasks/status"
+  - "cloudtasks/finalizers"
+  verbs:
+  - "create"       # Create CloudTask resources
+  - "get"          # Get individual CloudTask
+  - "list"         # List CloudTasks across all namespaces
+  - "watch"        # Watch for CloudTask changes
+  - "update"       # Update CloudTask spec
+  - "patch"        # Patch CloudTask fields
+  - "delete"       # Delete CloudTask
+  - "deletecollection"  # Batch delete
+
+# ==========================================
+# RULE 2: Namespace Management
+# Allow operator to read namespace metadata (for multi-tenant isolation)
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "namespaces"
+  verbs:
+  - "get"          # Get namespace metadata
+  - "list"         # List all namespaces
+  - "watch"        # Watch namespace creation/deletion
+  - "create"       # Create new tenant namespaces (optional)
+  - "patch"        # Update namespace labels/annotations
+
+# ==========================================
+# RULE 3: Pod Lifecycle Management (Cluster-wide)
+# Allow operator to create, manage, and delete pods for tasks
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "pods"
+  - "pods/log"
+  - "pods/status"
+  - "pods/exec"
+  - "pods/attach"
+  verbs:
+  - "create"       # Create pods from CloudTask spec
+  - "delete"       # Delete pods when tasks complete
+  - "get"          # Get pod details for monitoring
+  - "list"         # List pods for status checks
+  - "watch"        # Watch pod progression
+  - "patch"        # Patch pod metadata/labels
+  - "update"       # Update pod specifications
+
+# ==========================================
+# RULE 4: Pod Disruption Management
+# Allow operator to manage pod disruptions (evictions, drains)
+# ==========================================
+- apiGroups:
+  - "policy"
+  resources:
+  - "poddisruptionbudgets"
+  verbs:
+  - "create"
+  - "get"
+  - "list"
+  - "watch"
+  - "update"
+  - "patch"
+  - "delete"
+
+# ==========================================
+# RULE 5: Event Management (Auditing & Debugging)
+# Allow operator to create and update events for audit trail
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "events"
+  verbs:
+  - "create"       # Create new events
+  - "get"          # Get individual event
+  - "list"         # List events for auditing
+  - "watch"        # Watch events
+  - "update"       # Update event details
+  - "patch"        # Patch event timestamps
+
+# ==========================================
+# RULE 6: Node Observation
+# Allow operator to access node information for resource planning
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "nodes"
+  - "nodes/stats"
+  - "nodes/proxy"
+  verbs:
+  - "get"          # Get node details (CPU, memory)
+  - "list"         # List all nodes
+  - "watch"        # Watch node status changes
+
+# ==========================================
+# RULE 7: ConfigMap & Secret Management
+# Allow operator to read configuration and store task data
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "configmaps"
+  - "secrets"
+  verbs:
+  - "create"       # Create config/secrets for tasks
+  - "get"          # Retrieve configurations
+  - "list"         # List configs across namespaces
+  - "watch"        # Watch for config changes
+  - "update"       # Update stored data
+  - "patch"        # Patch config values
+  - "delete"       # Clean up old configs
+
+# ==========================================
+# RULE 8: ServiceAccount Management
+# Allow operator to read service accounts (for RBAC verification)
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "serviceaccounts"
+  verbs:
+  - "get"          # Get ServiceAccount details
+  - "list"         # List service accounts
+  - "watch"        # Watch for new service accounts
+
+# ==========================================
+# RULE 9: RBAC Management
+# Allow operator to verify and manage Roles/RoleBindings
+# ==========================================
+- apiGroups:
+  - "rbac.authorization.k8s.io"
+  resources:
+  - "roles"
+  - "rolebindings"
+  - "clusterroles"
+  - "clusterrolebindings"
+  verbs:
+  - "get"          # Read RBAC configs
+  - "list"         # List RBAC resources
+  - "watch"        # Watch RBAC changes
+
+# ==========================================
+# RULE 10: PersistentVolume Management
+# Allow operator to manage storage for tasks
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "persistentvolumes"
+  - "persistentvolumeclaims"
+  verbs:
+  - "get"          # Get PV/PVC details
+  - "list"         # List storage resources
+  - "watch"        # Watch PVC binding
+
+# ==========================================
+# RULE 11: Deployment & Workload Management (Optional)
+# Allow operator to manage other workloads if needed
+# Uncomment if operator needs to create deployments/statefulsets
+# ==========================================
+# - apiGroups:
+#   - "apps"
+#   resources:
+#   - "deployments"
+#   - "statefulsets"
+#   - "daemonsets"
+#   - "replicasets"
+#   verbs:
+#   - "get"
+#   - "list"
+#   - "watch"
+
+# ==========================================
+# RULE 12: NetworkPolicy Management
+# Allow operator to create and manage network policies
+# ==========================================
+- apiGroups:
+  - "networking.k8s.io"
+  resources:
+  - "networkpolicies"
+  verbs:
+  - "create"       # Create tenant isolation policies
+  - "get"          # Get policy details
+  - "list"         # List network policies
+  - "watch"        # Watch policy changes
+  - "update"       # Update policies
+  - "delete"       # Remove policies
+
+# ==========================================
+# RULE 13: Resource Quota & Limit Management
+# Allow operator to read quota and limit configurations
+# ==========================================
+- apiGroups:
+  - ""
+  resources:
+  - "resourcequotas"
+  - "limitranges"
+  verbs:
+  - "get"          # Get quota/limit details
+  - "list"         # List across namespaces
+  - "watch"        # Monitor quota usage
+
+# ==========================================
+# RULE 14: Metrics & Observability (Optional)
+# Allow operator to read metrics for autoscaling decisions
+# Requires metrics-server to be installed
+# ==========================================
+- apiGroups:
+  - "metrics.k8s.io"
+  resources:
+  - "pods"
+  - "nodes"
+  verbs:
+  - "get"          # Get current metrics
+  - "list"         # List metrics across cluster
+
+# ==========================================
+# RULE 15: Horizontal Pod Autoscaler (Optional)
+# Allow operator to manage HPA for task scaling
+# ==========================================
+- apiGroups:
+  - "autoscaling"
+  resources:
+  - "horizontalpodautoscalers"
+  verbs:
+  - "create"
+  - "get"
+  - "list"
+  - "watch"
+  - "update"
+  - "delete"
+
+# ==========================================
+# RULE 16: KEDA ScaledObjects (Optional)
+# Allow operator to manage KEDA scaling
+# ==========================================
+- apiGroups:
+  - "keda.sh"
+  resources:
+  - "scaledobjects"
+  - "triggerauthentications"
+  verbs:
+  - "create"
+  - "get"
+  - "list"
+  - "watch"
+  - "update"
+  - "delete"
+
+# ==========================================
+# RULE 17: Batch API (For scheduled tasks)
+# Allow operator to manage Kubernetes Job objects
+# ==========================================
+- apiGroups:
+  - "batch"
+  resources:
+  - "jobs"
+  - "cronjobs"
+  verbs:
+  - "create"
+  - "get"
+  - "list"
+  - "watch"
+  - "update"
+  - "delete"

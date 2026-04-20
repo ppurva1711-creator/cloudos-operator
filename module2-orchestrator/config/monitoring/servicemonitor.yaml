@@ -1,0 +1,181 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudtask-operator-metrics
+  namespace: monitoring
+  labels:
+    app: cloudtask-operator
+    release: kube-prometheus-stack
+spec:
+  # Select services in orchestrator-system namespace
+  namespaceSelector:
+    matchNames:
+      - orchestrator-system
+  
+  # Select the operator service
+  selector:
+    matchLabels:
+      app: cloudtask-operator
+      component: metrics
+  
+  # Endpoints to scrape
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+      scheme: http
+      relabelings:
+        # Add namespace label
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        # Add pod name label
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        # Add service name label
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway-metrics
+  namespace: monitoring
+  labels:
+    app: api-gateway
+    release: kube-prometheus-stack
+spec:
+  # Select services in orchestrator-system namespace
+  namespaceSelector:
+    matchNames:
+      - orchestrator-system
+  
+  # Select the API gateway service
+  selector:
+    matchLabels:
+      app: api-gateway
+      component: metrics
+  
+  # Endpoints to scrape
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+      scheme: http
+      relabelings:
+        # Add namespace label
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        # Add pod name label
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        # Add service name label
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-metrics
+  namespace: monitoring
+  labels:
+    app: redis
+    release: kube-prometheus-stack
+spec:
+  # Select services in module2-system namespace
+  namespaceSelector:
+    matchNames:
+      - module2-system
+  
+  # Select the redis-exporter service
+  selector:
+    matchLabels:
+      app: redis
+      component: metrics
+  
+  # Endpoints to scrape
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /metrics
+      scheme: http
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-metrics
+  namespace: monitoring
+  labels:
+    app: postgres
+    release: kube-prometheus-stack
+spec:
+  # Select services in module2-system namespace
+  namespaceSelector:
+    matchNames:
+      - module2-system
+  
+  # Select the postgres-exporter service
+  selector:
+    matchLabels:
+      app: postgres
+      component: metrics
+  
+  # Endpoints to scrape
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /metrics
+      scheme: http
+
+---
+# PodMonitor for scraping pods directly
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cloudtask-operator-pods
+  namespace: monitoring
+  labels:
+    app: cloudtask-operator
+spec:
+  selector:
+    matchLabels:
+      app: cloudtask-operator
+  
+  namespaceSelector:
+    matchNames:
+      - orchestrator-system
+  
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: api-gateway-pods
+  namespace: monitoring
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  
+  namespaceSelector:
+    matchNames:
+      - orchestrator-system
+  
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics

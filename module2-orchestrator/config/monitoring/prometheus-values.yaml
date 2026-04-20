@@ -1,0 +1,161 @@
+# Helm values for Prometheus
+# CloudTask Orchestrator monitoring configuration
+
+# Enable Prometheus
+prometheus:
+  enabled: true
+  
+  # Prometheus server configuration
+  server:
+    enabled: true
+    
+    # Service configuration
+    service:
+      type: ClusterIP
+      port: 80
+      targetPort: 9090
+    
+    # Ingress (optional)
+    ingress:
+      enabled: false
+      # Can be enabled later for HTTPS access via NGINX
+      # path: /
+      # hosts:
+      #   - prometheus.cloudtask.local
+      # tls:
+      #   - secretName: cloudtask-tls
+    
+    # Persistent storage
+    persistentVolume:
+      enabled: true
+      storageClassName: ""  # Use default storage class
+      accessModes:
+        - ReadWriteOnce
+      size: 10Gi
+    
+    # Resource requests
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 1000m
+        memory: 3Gi
+    
+    # Prometheus server configuration
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      evaluation_interval: 15s
+    
+    # Retention period
+    retention: 15d
+    
+    # Scrape configs for service discovery
+    serverFiles:
+      prometheus.yml:
+        global:
+          scrape_interval: 15s
+          scrape_timeout: 10s
+          evaluation_interval: 15s
+          external_labels:
+            cluster: cloudtask
+            environment: kubernetes
+        
+        # Scrape CloudTask Operator metrics
+        scrape_configs:
+          - job_name: 'cloudtask-operator'
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - orchestrator-system
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                action: keep
+                regex: cloudtask-operator
+              - source_labels: [__meta_kubernetes_pod_container_port_number]
+                action: keep
+                regex: '8080'
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+          
+          # Scrape API Gateway metrics
+          - job_name: 'api-gateway'
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - orchestrator-system
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                action: keep
+                regex: api-gateway
+              - source_labels: [__meta_kubernetes_pod_container_port_number]
+                action: keep
+                regex: '8080'
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+          
+          # Scrape KEDA metrics
+          - job_name: 'keda'
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - keda
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                action: keep
+                regex: keda-operator
+              - source_labels: [__meta_kubernetes_pod_container_port_number]
+                action: keep
+                regex: '8080'
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+          
+          # Scrape Node Exporter (kubelet metrics)
+          - job_name: 'node-exporter'
+            kubernetes_sd_configs:
+              - role: node
+            relabel_configs:
+              - action: labelmap
+                regex: __meta_kubernetes_node_label_(.+)
+              - source_labels: [__address__]
+                regex: '([^:]+)(?::\d+)?'
+                replacement: '${1}:9100'
+                target_label: __address__
+              - source_labels: [__scheme__]
+                action: replace
+                target_label: __scheme__
+                replacement: http
+          
+          # Scrape Kubelet metrics
+          - job_name: 'kubelet'
+            scheme: https
+            tls_config:
+              ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            kubernetes_sd_configs:
+              - role: node
+            relabel_configs:
+              - action: labelmap
+                regex: __meta_kubernetes_node_label_(.+)
+
+# Disable AlertManager if not needed
+alertmanager:
+  enabled: false
+
+# Disable kube-state-metrics if not needed
+kubeStateMetrics:
+  enabled: true
+
+# Disable node-exporter if not needed
+nodeExporter:
+  enabled: true

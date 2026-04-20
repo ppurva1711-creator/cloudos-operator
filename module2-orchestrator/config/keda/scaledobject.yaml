@@ -1,0 +1,60 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: cloudtask-scaler
+  namespace: orchestrator-system
+spec:
+  scaleTargetRef:
+    name: cloudtask-operator
+    kind: Deployment
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus:9090
+      query: |
+        sum(rate(cloudtask_total{phase="Pending"}[1m]))
+      threshold: "10"
+      # Scale up when there are more than 10 pending tasks per minute
+  - type: cpu
+    metadata:
+      type: Utilization
+      value: "70"
+  cooldownPeriod: 30
+  pollingInterval: 30
+  fallback:
+    replicas: 1
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          selectPolicy: Max
+
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: cloudtask-worker-scaler
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: cloudtask-worker
+    kind: Deployment
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus:9090
+      query: |
+        sum(rate(cloudtask_total{phase="Running"}[1m]))
+      threshold: "5"
+  - type: kubernetes-workload
+    metadata:
+      podSelector: cloudtask-name=""
+  pollingInterval: 15
+  cooldownPeriod: 60

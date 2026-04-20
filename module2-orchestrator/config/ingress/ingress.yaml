@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudtask-api-gateway
+  namespace: default
+  labels:
+    app: cloudtask-api-gateway
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: cloudtask-api-gateway
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudtask-api-gateway
+  namespace: default
+  labels:
+    app: cloudtask-api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudtask-api-gateway
+  template:
+    metadata:
+      labels:
+        app: cloudtask-api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: cloudtask-api-gateway:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+        - name: metrics
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloudtask-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/auth-type: bearer
+    nginx.ingress.kubernetes.io/auth-url: "http://cloudtask-auth-check:8080/validate"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api.cloudtask.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: cloudtask-api-gateway
+            port:
+              number: 8000
+  - host: metrics.cloudtask.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus
+            port:
+              number: 9090
+  tls:
+  - hosts:
+    - api.cloudtask.local
+    - metrics.cloudtask.local
+    secretName: cloudtask-tls-secret

@@ -1,0 +1,197 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Verify cluster connection
+        run: kubectl cluster-info
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace orchestrator-system --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy CRD
+        run: kubectl apply -f config/crd/cloudtask_crd.yaml
+
+      - name: Deploy RBAC
+        run: kubectl apply -f config/rbac/rbac.yaml
+
+      - name: Deploy operator
+        run: |
+          kubectl set image deployment/cloudtask-operator \
+            cloudtask-operator=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/operator:main \
+            -n orchestrator-system --record || \
+          kubectl apply -f config/operator/deployment.yaml
+
+      - name: Wait for deployment
+        run: |
+          kubectl rollout status deployment/cloudtask-operator -n orchestrator-system --timeout=5m
+
+      - name: Deploy monitoring
+        run: |
+          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f config/monitoring/prometheus.yaml
+
+      - name: Run smoke tests
+        run: |
+          kubectl get cloudtasks --all-namespaces
+          kubectl get deployment -n orchestrator-system
+
+      - name: Post to Slack
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Staging deployment result: ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Staging deployment: *${{ job.status }}*\nCommit: ${{ github.sha }}\nRef: ${{ github.ref }}"
+                  }
+                }
+              ]
+            }
+
+  deploy-production:
+    if: github.event.inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    needs: deploy-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Verify cluster connection
+        run: kubectl cluster-info
+
+      - name: Deploy with Helm (if available)
+        run: |
+          # helm repo add cloudtask https://charts.example.com
+          # helm upgrade --install cloudtask cloudtask/orchestrator -f values.yaml -n orchestrator-system
+          echo "Deploying to production..."
+
+      - name: Apply GitOps manifests
+        run: |
+          kubectl create namespace orchestrator-system --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f config/
+          kubectl apply -f config/argocd/application.yaml
+
+      - name: Wait for operator
+        run: |
+          kubectl rollout status deployment/cloudtask-operator -n orchestrator-system --timeout=10m
+
+      - name: Health check
+        run: |
+          for i in {1..10}; do
+            if kubectl get deployment/cloudtask-operator -n orchestrator-system -o jsonpath='{.status.readyReplicas}' | grep -E '^[1-9]'; then
+              echo "Operator is healthy"
+              exit 0
+            fi
+            echo "Waiting for operator... ($i/10)"
+            sleep 10
+          done
+          echo "Operator health check failed"
+          exit 1
+
+      - name: Notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Production deployment result: ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Production deployment: *${{ job.status }}*\nCommit: ${{ github.sha }}\nRef: ${{ github.ref }}"
+                  }
+                }
+              ]
+            }
+
+  rollback:
+    if: failure() && github.event.inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Rollback deployment
+        run: |
+          kubectl rollout undo deployment/cloudtask-operator -n orchestrator-system
+
+      - name: Verify rollback
+        run: |
+          kubectl rollout status deployment/cloudtask-operator -n orchestrator-system --timeout=5m
+
+      - name: Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "⚠️ Production deployment FAILED and rolled back",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Production deployment failed and was *rolled back*\nCommit: ${{ github.sha }}"
+                  }
+                }
+              ]
+            }

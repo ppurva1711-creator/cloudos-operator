@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-rate-limit
+  namespace: ingress-nginx
+data:
+  # Global rate limiting configuration for NGINX Ingress
+  
+  # Rate limit zone definition
+  # Limits concurrent connections and request rate
+  limit-req-status: "429"
+  limit-conn-status: "429"
+  
+  # Use the X-Forwarded-For header to identify clients
+  # Set to "true" if behind a trusted proxy
+  use-forwarded-headers: "true"
+  
+  # Log requests that exceed rate limit
+  limit-req-log-level: "warn"
+  limit-conn-log-level: "warn"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-tcp-config
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+data:
+  # TCP rate limiting configuration for optimal performance
+  # Prevents resource exhaustion from excessive connections
+  
+  # Maximum allowed connections per IP
+  limit-connections-per-ip: "100"
+  
+  # Maximum allowed requests per second per IP
+  limit-rps: "1000"
+  
+  # Burst size (allows temporary spikes)
+  limit-burst-multiplier: "2"
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-nginx-policy
+  namespace: ingress-nginx
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/component: controller
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from all sources (rate limiting handled at NGINX level)
+    - from:
+        - namespaceSelector: {}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow to backend services in other namespaces
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    # Allow to metrics/monitoring services
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+
+---
+# Rate limiting annotations reference
+# This documents inline rate limiting that can be applied per-ingress
+# 
+# Example per-ingress rate limiting annotations:
+#
+# metadata:
+#   annotations:
+#     # Limit to 100 requests per second per IP
+#     nginx.ingress.kubernetes.io/limit-rps: "100"
+#     
+#     # Limit to 50 concurrent connections per IP  
+#     nginx.ingress.kubernetes.io/limit-connections: "50"
+#     
+#     # Custom rate limit zone name
+#     nginx.ingress.kubernetes.io/limit-req-zone: "limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;"
+#     
+#     # Custom connection limit zone
+#     nginx.ingress.kubernetes.io/limit-conn-zone: "limit_conn_zone $binary_remote_addr zone=addr:10m;"
+#
+# Configuration parameters can also be set globally in this ConfigMap

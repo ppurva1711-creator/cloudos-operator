@@ -1,0 +1,106 @@
+{{- if .Values.autoscaling.enabled }}
+---
+{{- if .Values.operator.enabled }}
+apiVersion: {{ include "module2.hpa.apiVersion" . }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "module2.fullname" . }}-operator
+  namespace: {{ include "module2.namespace" . }}
+  labels:
+    {{- include "module2.labels" . }}
+    app: cloudtask-operator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "module2.fullname" . }}-operator
+  minReplicas: {{ .Values.autoscaling.operator.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.operator.maxReplicas }}
+  {{- if eq (include "module2.hpa.apiVersion" .) "autoscaling/v2" }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.operator.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.operator.targetMemoryUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+  {{- else }}
+  targetCPUUtilizationPercentage: {{ .Values.autoscaling.operator.targetCPUUtilizationPercentage }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.gateway.enabled }}
+apiVersion: {{ include "module2.hpa.apiVersion" . }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "module2.fullname" . }}-gateway
+  namespace: {{ include "module2.namespace" . }}
+  labels:
+    {{- include "module2.labels" . }}
+    app: api-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "module2.fullname" . }}-gateway
+  minReplicas: {{ .Values.autoscaling.gateway.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.gateway.maxReplicas }}
+  {{- if eq (include "module2.hpa.apiVersion" .) "autoscaling/v2" }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.gateway.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.gateway.targetMemoryUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+  {{- else }}
+  targetCPUUtilizationPercentage: {{ .Values.autoscaling.gateway.targetCPUUtilizationPercentage }}
+  {{- end }}
+{{- end }}
+{{- end }}

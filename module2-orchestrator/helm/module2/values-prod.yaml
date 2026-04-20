@@ -1,0 +1,122 @@
+# CloudTask Orchestrator - Production Environment Values
+# Override default values for production
+
+global:
+  environment: production
+
+# Operator - 3 replicas with production resources
+operator:
+  replicas: 3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  env:
+    LOG_LEVEL: info
+    ENABLE_WEBHOOKS: "true"
+    LEADER_ELECTION: "true"
+
+# Gateway - 3 replicas with production resources
+gateway:
+  replicas: 3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  env:
+    LOG_LEVEL: warn
+
+# Ingress configuration for production with TLS
+ingress:
+  enabled: true
+  host: cloudtask.production.com
+  tls:
+    enabled: true
+    issuer: "letsencrypt-prod"
+    certName: "cloudtask-tls"
+
+# Enable autoscaling in production
+autoscaling:
+  enabled: true
+  operator:
+    minReplicas: 3
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  gateway:
+    minReplicas: 3
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# Full monitoring in production
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    scrapeInterval: 15s
+    retention: 30d
+  grafana:
+    enabled: true
+    dashboards: true
+
+# Production storage sizing
+redis:
+  master:
+    persistence:
+      size: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+postgresql:
+  primary:
+    persistence:
+      size: 100Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# Enable network policy in production
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app: api-gateway
+      ports:
+      - protocol: TCP
+        port: 6379
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app: redis
+      ports:
+      - protocol: TCP
+        port: 6379
+
+# Enable pod disruption budget for high availability
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Production logging configuration
+logConfig:
+  logLevel: warn
+  jsonLogging: true

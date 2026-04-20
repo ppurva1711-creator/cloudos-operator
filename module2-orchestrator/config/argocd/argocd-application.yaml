@@ -1,0 +1,82 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: module2
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/orchestrator/module2-orchestrator
+    targetRevision: main
+    path: helm/module2
+    
+    helm:
+      # Use development values by default, override with values-prod.yaml for production
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+      
+      # Helm parameters for overriding specific values
+      parameters: []
+      
+      # Release name for Helm deployment
+      releaseName: module2
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orchestrator-system
+  
+  # Sync policy for GitOps automation
+  syncPolicy:
+    # Automated sync: ArgoCD automatically syncs the application when changes are detected
+    automated:
+      prune: true           # Delete resources that no longer exist in Git
+      selfHeal: true        # Automatically sync when cluster diverges from Git
+    
+    # Sync options
+    syncOptions:
+      - CreateNamespace=true  # Create namespace if it doesn't exist
+      - ApplyOutOfSyncOnly=true  # Only apply resources that are out of sync
+    
+    # Retry policy for failed syncs
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  # Notification settings
+  info:
+    - name: Documentation
+      value: https://github.com/orchestrator/module2-orchestrator
+    - name: Helm Chart
+      value: helm/module2
+    - name: Environment
+      value: development
+  
+  # Revision history limit
+  revisionHistoryLimit: 10
+
+---
+# Optional: ArgoCD Project (namespace-scoped permissions)
+# Uncomment and adjust if using RBAC and project-level permissions
+# apiVersion: argoproj.io/v1alpha1
+# kind: AppProject
+# metadata:
+#   name: cloudtask-project
+#   namespace: argocd
+# spec:
+#   sourceRepos:
+#   - 'https://github.com/orchestrator/*'
+#   destinations:
+#   - namespace: 'orchestrator-system'
+#     server: https://kubernetes.default.svc
+#   clusterResourceWhitelist:
+#   - group: ''
+#     kind: Namespace
+#   - group: 'rbac.authorization.k8s.io'
+#     kind: ClusterRoleBinding

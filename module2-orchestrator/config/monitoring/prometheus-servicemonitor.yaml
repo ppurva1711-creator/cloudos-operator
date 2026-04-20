@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudtask-operator-monitor
+  namespace: monitoring
+  labels:
+    app: cloudtask-operator
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: cloudtask-operator
+  namespaceSelector:
+    matchNames:
+      - orchestrator-system
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+      scheme: http
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway-monitor
+  namespace: monitoring
+  labels:
+    app: api-gateway
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  namespaceSelector:
+    matchNames:
+      - orchestrator-system
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+      scheme: http

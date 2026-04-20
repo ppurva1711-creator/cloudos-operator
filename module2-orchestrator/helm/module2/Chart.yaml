@@ -1,0 +1,26 @@
+apiVersion: v2
+name: module2
+description: CloudTask Orchestrator Helm Chart - Complete Kubernetes deployment
+type: application
+version: 1.0.0
+appVersion: 1.0.0
+home: https://github.com/orchestrator/module2-orchestrator
+sources:
+  - https://github.com/orchestrator/module2-orchestrator
+maintainers:
+  - name: CloudTask Team
+    email: team@cloudtask.local
+keywords:
+  - cloudtask
+  - orchestrator
+  - kubernetes
+  - scheduler
+dependencies:
+  - name: redis
+    version: "17.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: postgresql
+    version: "12.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled

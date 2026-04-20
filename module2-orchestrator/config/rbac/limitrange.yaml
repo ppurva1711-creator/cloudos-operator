@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-limit-range
+  namespace: tenant-${TENANT_ID}
+  labels:
+    tenant-id: "${TENANT_ID}"
+    managed-by: "cloudtask-operator"
+    component: "resource-controls"
+  annotations:
+    description: "LimitRange for tenant ${TENANT_ID} - enforces default and max resource limits for containers"
+    last-updated: "2026-04-19"
+    rationale: "Prevents resource starvation and ensures fair resource allocation"
+
+spec:
+  limits:
+  # ==========================================
+  # CONTAINER LIMITS (Per individual container)
+  # ==========================================
+  - type: Container
+    
+    # DEFAULT LIMITS (Automatically applied if not specified)
+    default:
+      cpu: "500m"             # Default CPU limit if none specified
+      memory: "512Mi"         # Default memory limit if none specified
+    
+    # DEFAULT REQUESTS (What container initially asks for)
+    defaultRequest:
+      cpu: "100m"             # Default CPU request if none specified
+      memory: "128Mi"         # Default memory request if none specified
+    
+    # MAXIMUM ALLOWED (Hard ceiling for containers)
+    max:
+      cpu: "2"                # Maximum CPU per container: 2 cores
+      memory: "4Gi"           # Maximum memory per container: 4 GiB
+    
+    # MINIMUM ALLOWED (Hard floor for containers)
+    min:
+      cpu: "50m"              # Minimum CPU per container: 50 milli-cores
+      memory: "64Mi"          # Minimum memory per container: 64 Mi
+    
+    # RESOURCE RATIO (Ratio of limit to request)
+    maxLimitRequestRatio:
+      cpu: "4"                # Max limit can be 4x the request (e.g., req=100m → limit=400m max)
+      memory: "4"             # Max limit can be 4x the request (e.g., req=128Mi → limit=512Mi max)
+
+  # ==========================================
+  # POD LIMITS (Aggregate across all containers in pod)
+  # ==========================================
+  - type: Pod
+    
+    # MAXIMUM ALLOWED (Pod as a whole cannot exceed these)
+    max:
+      cpu: "4"                # Max CPU for entire Pod: 4 cores
+      memory: "8Gi"           # Max memory for entire Pod: 8 GiB
+    
+    # MINIMUM ALLOWED (Pod must request at least this)
+    min:
+      cpu: "50m"              # Min CPU for entire Pod: 50 milli-cores
+      memory: "64Mi"          # Min memory for entire Pod: 64 Mi
+    
+    # RESOURCE RATIO (Ratio of limit to request for pod)
+    maxLimitRequestRatio:
+      cpu: "4"
+      memory: "4"
+
+  # ==========================================
+  # PERSISTENT VOLUME CLAIM LIMITS
+  # ==========================================
+  - type: PersistentVolumeClaim
+    
+    # MAXIMUM ALLOWED (Largest PVC per namespace)
+    max:
+      storage: "100Gi"        # Maximum size of any single PVC
+    
+    # MINIMUM ALLOWED (Smallest PVC)
+    min:
+      storage: "1Gi"          # Minimum size of any PVC
+
+---
+# OPTIONAL: Additional Pod Disruption Budget
+# Ensures availability during voluntary disruptions (node drains, upgrades)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloudtask-pdb
+  namespace: tenant-${TENANT_ID}
+  labels:
+    tenant-id: "${TENANT_ID}"
+    managed-by: "cloudtask-operator"
+  annotations:
+    description: "Ensures CloudTask pods maintain availability during cluster maintenance"
+spec:
+  minAvailable: 1  # At least 1 pod must be available during disruption
+  selector:
+    matchLabels:
+      tenant-id: "${TENANT_ID}"
+  unhealthyPodEvictionPolicy: "AlwaysAllow"
+  # If you want maxUnavailable instead:
+  # maxUnavailable: 1  # At most 1 pod can be disrupted at a time

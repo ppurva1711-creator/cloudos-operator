@@ -1,0 +1,126 @@
+---
+# Example 1: Simple CloudTask
+apiVersion: tasks.orchestrator.dev/v1
+kind: CloudTask
+metadata:
+  name: simple-task
+  namespace: default
+spec:
+  image: alpine:latest
+  command:
+    - /bin/sh
+    - -c
+  args:
+    - "echo 'Hello from CloudTask' && sleep 5"
+  tenantID: tenant-1
+  retries: 3
+  timeout: "10m"
+  priority: 50
+
+---
+# Example 2: CloudTask with resource request/limits
+apiVersion: tasks.orchestrator.dev/v1
+kind: CloudTask
+metadata:
+  name: resource-task
+  namespace: default
+spec:
+  image: python:3.11-slim
+  command:
+    - python
+  args:
+    - "-c"
+    - "import time; print('Processing...'); time.sleep(10); print('Done')"
+  tenantID: tenant-2
+  retries: 2
+  timeout: "15m"
+  priority: 75
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+---
+# Example 3: CloudTask with environment variables
+apiVersion: tasks.orchestrator.dev/v1
+kind: CloudTask
+metadata:
+  name: env-task
+  namespace: default
+spec:
+  image: bash:latest
+  command:
+    - bash
+  args:
+    - "-c"
+    - "echo Processing $JOB_ID; for i in {1..5}; do echo 'Iteration '$i'; sleep 1; done"
+  tenantID: tenant-3
+  retries: 1
+  timeout: "5m"
+  priority: 50
+  env:
+    - name: JOB_ID
+      value: "job-12345"
+    - name: LOG_LEVEL
+      value: "DEBUG"
+    - name: MAX_RETRIES
+      value: "3"
+
+---
+# Example 4: CloudTask with labels and annotations
+apiVersion: tasks.orchestrator.dev/v1
+kind: CloudTask
+metadata:
+  name: labeled-task
+  namespace: default
+  labels:
+    env: production
+    version: v1.0
+spec:
+  image: nginx:latest
+  tenantID: tenant-4
+  retries: 3
+  timeout: "30m"
+  priority: 80
+  labels:
+    app: web-service
+    component: api
+  annotations:
+    description: "Production web service task"
+    owner: "platform-team"
+    cost-center: "platform"
+
+---
+# Example 5: CloudTask with custom scheduling
+apiVersion: tasks.orchestrator.dev/v1
+kind: CloudTask
+metadata:
+  name: batch-job
+  namespace: default
+spec:
+  image: python:3.11
+  command:
+    - python
+  args:
+    - "-c"
+    - |
+      import json
+      data = [1, 2, 3, 4, 5]
+      result = sum(data)
+      print(f"Sum: {result}")
+      with open('/tmp/result.json', 'w') as f:
+          json.dump({'result': result}, f)
+  tenantID: tenant-5
+  retries: 2
+  timeout: "20m"
+  priority: 40
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1024Mi"

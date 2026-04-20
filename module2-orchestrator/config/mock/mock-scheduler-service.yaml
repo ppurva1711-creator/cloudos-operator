@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: module1-scheduler
+  namespace: orchestrator-system
+  labels:
+    app: module1-scheduler
+spec:
+  type: ClusterIP
+  selector:
+    app: module1-scheduler
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP

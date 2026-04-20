@@ -1,0 +1,76 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudtask-alerts
+  namespace: monitoring
+  labels:
+    prometheus: prometheus
+spec:
+  groups:
+    - name: cloudtask.rules
+      interval: 15s
+      rules:
+        # Alert: High Queue Depth
+        - alert: HighQueueDepth
+          expr: |
+            queue_depth > 100
+          for: 5m
+          labels:
+            severity: warning
+            component: operator
+          annotations:
+            summary: "CloudTask queue depth is high"
+            description: "Queue depth is {{ $value }} tasks (threshold: 100). Queue has been backed up for 5 minutes."
+            runbook_url: "https://internal-docs/runbooks/high-queue-depth"
+
+        # Alert: High Error Rate
+        - alert: HighErrorRate
+          expr: |
+            (increase(error_count[2m]) / (increase(total_requests[2m]) + 0.0001)) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "API Gateway error rate is high"
+            description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%). Review gateway logs."
+            runbook_url: "https://internal-docs/runbooks/high-error-rate"
+
+        # Alert: Pod Crash Looping
+        - alert: PodCrashLooping
+          expr: |
+            increase(kubernetes_pod_restart_count[10m]) > 5
+          for: 5m
+          labels:
+            severity: critical
+            component: "{{ $labels.pod }}"
+          annotations:
+            summary: "Pod is crash looping"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in 10 minutes."
+            runbook_url: "https://internal-docs/runbooks/pod-crash-looping"
+
+        # Alert: Operator Down
+        - alert: OperatorDown
+          expr: |
+            up{job="cloudtask-operator"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: operator
+          annotations:
+            summary: "CloudTask Operator is down"
+            description: "CloudTask Operator pod in namespace orchestrator-system is not responding."
+            runbook_url: "https://internal-docs/runbooks/operator-down"
+
+        # Alert: High Memory Usage
+        - alert: HighMemoryUsage
+          expr: |
+            (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            component: "{{ $labels.pod }}"
+          annotations:
+            summary: "Container memory usage is high"
+            description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory limit."
+            runbook_url: "https://internal-docs/runbooks/high-memory-usage"

@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: module1-scheduler
+  namespace: orchestrator-system
+  labels:
+    app: module1-scheduler
+    component: mock-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: module1-scheduler
+  template:
+    metadata:
+      labels:
+        app: module1-scheduler
+        component: mock-scheduler
+    spec:
+      containers:
+      - name: mock-scheduler
+        image: cloudtask-mock-scheduler:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        env:
+        # Scheduler behavior configuration
+        - name: MOCK_PORT
+          value: "50051"
+        - name: MOCK_DELAY_MS
+          valueFrom:
+            configMapKeyRef:
+              name: mock-scheduler-config
+              key: delay-ms
+              optional: true
+          # Default: 100ms if ConfigMap key not found
+        - name: MOCK_FAILURE_RATE
+          valueFrom:
+            configMapKeyRef:
+              name: mock-scheduler-config
+              key: failure-rate
+              optional: true
+          # Default: 0% if ConfigMap key not found
+        - name: MOCK_QUEUE_DEPTH
+          valueFrom:
+            configMapKeyRef:
+              name: mock-scheduler-config
+              key: initial-queue-depth
+              optional: true
+          # Default: 0 if ConfigMap key not found
+        - name: MOCK_SCENARIO
+          valueFrom:
+            configMapKeyRef:
+              name: mock-scheduler-config
+              key: scenario
+              optional: true
+          # Default: normal if ConfigMap key not found
+        
+        # External service connections
+        - name: REDIS_ADDR
+          value: "redis.orchestrator-system:6379"
+        - name: POSTGRES_DSN
+          value: "postgres://postgres:postgres@postgres.orchestrator-system:5432/cloudtask?sslmode=disable"
+        
+        # Logging
+        - name: LOG_LEVEL
+          value: "info"
+        
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        
+        livenessProbe:
+          tcpSocket:
+            port: grpc
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          tcpSocket:
+            port: grpc
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      
+      restartPolicy: Always
+      serviceAccountName: mock-scheduler
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mock-scheduler
+  namespace: orchestrator-system
+  labels:
+    app: module1-scheduler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mock-scheduler
+  labels:
+    app: module1-scheduler
+rules:
+# No special permissions needed for mock scheduler
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mock-scheduler
+  labels:
+    app: module1-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mock-scheduler
+subjects:
+- kind: ServiceAccount
+  name: mock-scheduler
+  namespace: orchestrator-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-scheduler-config
+  namespace: orchestrator-system
+  labels:
+    app: module1-scheduler
+data:
+  # Scheduler behavior parameters
+  delay-ms: "100"                    # Delay before moving task from Pending to Running
+  failure-rate: "0"                  # Percentage of tasks to fail (0-100)
+  initial-queue-depth: "0"           # Pre-fill queue with N tasks on startup
+  scenario: "normal"                 # Predefined scenario: normal, slow-scheduler, high-failure, queue-backlog, resource-contention, stress-test

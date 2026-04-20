@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+  namespace: tenant-${TENANT_ID}
+  labels:
+    tenant-id: "${TENANT_ID}"
+    managed-by: "cloudtask-operator"
+    quota-tier: "standard"
+  annotations:
+    description: "ResourceQuota for tenant ${TENANT_ID} - controls total resource consumption"
+    last-updated: "2026-04-19"
+spec:
+  # ==========================================
+  # CPU & MEMORY HARD LIMITS (Total per tenant)
+  # ==========================================
+  hard:
+    # CPU Limits
+    requests.cpu: "4"           # Total CPU requested across all pods: 4 cores
+    limits.cpu: "10"            # Total CPU limit across all pods: 10 cores
+    
+    # Memory Limits
+    requests.memory: "8Gi"      # Total memory requested across all pods: 8 GiB
+    limits.memory: "20Gi"       # Total memory limit across all pods: 20 GiB
+    
+    # ==========================================
+    # POD & WORKLOAD COUNTS
+    # ==========================================
+    pods: "100"                 # Maximum number of Pods per namespace: 100
+    
+    # ==========================================
+    # STORAGE RESOURCES
+    # ==========================================
+    persistentvolumeclaims: "10" # Maximum PVCs per namespace: 10
+    requests.storage: "500Gi"    # Total storage that can be requested: 500Gi
+    
+    # ==========================================
+    # COMPUTE SERVICE RESOURCES
+    # ==========================================
+    services: "50"              # Maximum services (LoadBalancer, NodePort, ClusterIP)
+    services.loadbalancers: "5"  # Maximum LoadBalancer services
+    services.nodeports: "5"      # Maximum NodePort services
+    
+    # ==========================================
+    # CUSTOM RESOURCES
+    # ==========================================
+    cloudtasks.tasks.orchestrator.dev: "1000"  # Maximum CloudTask resources
+  
+  # ==========================================
+  # SCOPE SELECTORS (Optional - fine-grained control)
+  # ==========================================
+  scopeSelector:
+    matchExpressions:
+    # Apply quota to pods that are not Guaranteed QoS class
+    - operator: "NotIn"
+      scopeName: "PriorityClass"
+      values: ["system-cluster-critical", "system-node-critical"]
+  
+  # ==========================================
+  # SCOPES (Filter which pods are counted)
+  # ==========================================
+  scopes:
+  # Count all pods (Guaranteed, Burstable, BestEffort)
+  - "NotBestEffort"
+
+---
+# OPTIONAL: Per-Priority Class Resource Quota
+# This allows different resource allocations for different priority levels
+# Uncomment if you want priority-based quotas
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota-best-effort
+  namespace: tenant-${TENANT_ID}
+  labels:
+    tenant-id: "${TENANT_ID}"
+    managed-by: "cloudtask-operator"
+    quota-tier: "best-effort"
+  annotations:
+    description: "ResourceQuota for best-effort pods (low priority)"
+spec:
+  hard:
+    # Limit best-effort pods to be minimal
+    pods: "20"
+    requests.cpu: "0.5"
+    requests.memory: "1Gi"
+  scopes:
+  - "BestEffort"

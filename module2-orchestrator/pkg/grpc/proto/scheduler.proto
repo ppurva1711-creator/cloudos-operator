@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package scheduler;
+
+option go_package = "github.com/orchestrator/module2-orchestrator/pkg/grpc/scheduler";
+
+// SchedulerService manages task scheduling and execution
+service SchedulerService {
+  // SubmitTask submits a new task for scheduling
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+
+  // GetTaskStatus retrieves the current status of a task
+  rpc GetTaskStatus(GetTaskStatusRequest) returns (TaskStatusResponse);
+
+  // CancelTask cancels a running or queued task
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+
+  // GetQueueDepth returns the current depth of the task queue
+  rpc GetQueueDepth(GetQueueDepthRequest) returns (QueueDepthResponse);
+}
+
+// SubmitTaskRequest represents a request to submit a new task
+message SubmitTaskRequest {
+  string task_id = 1;              // Unique task identifier
+  string tenant_id = 2;            // Tenant that owns this task
+  string image = 3;                // Container image URL
+  repeated string command = 4;     // Command to execute
+  string cpu_request = 5;          // CPU request (e.g., "100m", "0.5")
+  string memory_request = 6;       // Memory request (e.g., "128Mi", "1Gi")
+  int32 priority = 7;              // Priority level (0-100)
+  int64 timeout_seconds = 8;       // Timeout in seconds
+}
+
+// SubmitTaskResponse represents the response from submitting a task
+message SubmitTaskResponse {
+  bool accepted = 1;               // Whether the task was accepted
+  int32 queue_position = 2;        // Position in queue (if accepted)
+  int64 estimated_start_seconds = 3; // Estimated start time (seconds from now)
+  string reason = 4;               // Rejection reason (if not accepted)
+}
+
+// GetTaskStatusRequest represents a request to get task status
+message GetTaskStatusRequest {
+  string task_id = 1;              // Task ID to query
+  string tenant_id = 2;            // Tenant that owns the task
+}
+
+// TaskStatusResponse represents the status of a task
+message TaskStatusResponse {
+  string task_id = 1;              // Task identifier
+  string status = 2;               // Status: Pending, Running, Completed, Failed
+  string pod_name = 3;             // Associated pod name
+  int64 started_at = 4;            // Start timestamp (Unix seconds)
+  int64 completed_at = 5;          // Completion timestamp (Unix seconds)
+  int32 exit_code = 6;             // Exit code (0 for success)
+}
+
+// CancelTaskRequest represents a request to cancel a task
+message CancelTaskRequest {
+  string task_id = 1;              // Task ID to cancel
+  string tenant_id = 2;            // Tenant that owns the task
+}
+
+// CancelTaskResponse represents the response from canceling a task
+message CancelTaskResponse {
+  bool cancelled = 1;              // Whether cancellation was successful
+  string reason = 2;               // Reason if not cancelled
+}
+
+// GetQueueDepthRequest represents a request to get queue depth
+message GetQueueDepthRequest {
+  // No fields required
+}
+
+// QueueDepthResponse represents the queue depth
+message QueueDepthResponse {
+  int32 total_queued = 1;          // Total tasks queued
+  int32 pending_tasks = 2;         // Tasks in Pending state
+  int32 running_tasks = 3;         // Tasks currently running
+}

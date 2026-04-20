@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scaling-policy-config
+  namespace: orchestrator-system
+  labels:
+    app: cloudtask-operator
+    component: scaling
+data:
+  min_replicas: "2"
+  max_replicas: "100"
+  queue_length_per_pod: "10"
+  cooldown_seconds: "300"
+  scale_up_stabilization: "0"
+  scale_down_stabilization: "300"
+  scale_up_cpu_threshold: "70"
+  scale_up_memory_threshold: "80"
+  scale_down_cpu_threshold: "35"
+  scale_down_memory_threshold: "40"
+  metrics_update_interval: "15"
+  queue_depth_check_interval: "10"
+  keda_list_name: "tasks:pending"
+  keda_redis_address: "redis.module2-system:6379"

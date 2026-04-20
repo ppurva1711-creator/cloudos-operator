@@ -1,0 +1,119 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "module2.fullname" . }}-gateway
+  namespace: {{ include "module2.namespace" . }}
+  labels:
+    {{- include "module2.labels" . }}
+    app: api-gateway
+    component: gateway
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  selector:
+    matchLabels:
+      {{- include "module2.selectorLabels" . }}
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        {{- include "module2.selectorLabels" . }}
+        app: api-gateway
+        component: gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- if .Values.gateway.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.gateway.podSecurityContext | nindent 8 }}
+      {{- end }}
+      
+      serviceAccountName: {{ include "module2.serviceAccountName" . }}
+      
+      containers:
+      - name: gateway
+        image: {{ include "module2.gateway.image" . }}
+        imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
+        
+        ports:
+        - name: http
+          containerPort: {{ .Values.gateway.service.targetPort }}
+          protocol: TCP
+        - name: metrics
+          containerPort: 8000
+          protocol: TCP
+        
+        env:
+        {{- range $key, $value := .Values.gateway.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        
+        {{- if .Values.redis.enabled }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis
+              key: redis-password
+        {{- end }}
+        
+        {{- if .Values.postgresql.enabled }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql
+              key: password
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql
+              key: username
+        {{- end }}
+        
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "module2.fullname" . }}-jwt-secret
+              key: jwt-secret
+              optional: true
+        
+        resources:
+          {{- toYaml .Values.gateway.resources | nindent 10 }}
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      
+      {{- if .Values.gateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.gateway.nodeSelector | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.gateway.affinity }}
+      affinity:
+        {{- toYaml .Values.gateway.affinity | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml .Values.gateway.tolerations | nindent 8 }}
+      {{- end }}
+      
+      terminationGracePeriodSeconds: 30
+{{- end }}

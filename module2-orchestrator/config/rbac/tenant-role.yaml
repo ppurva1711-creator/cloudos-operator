@@ -1,0 +1,141 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tenant-role
+  namespace: ${TENANT_NAMESPACE}  # Replace with actual tenant namespace (e.g., tenant-a)
+  labels:
+    app: cloudtask
+    component: tenant-rbac
+    managed-by: cloudtask-operator
+    tenant-id: "${TENANT_NAME}"  # Replace with tenant ID
+  annotations:
+    description: "Namespaced Role for CloudTask tenant - allows task management within assigned namespace"
+    created-by: "cloudtask-orchestrator"
+    version: "v1.0.0"
+
+rules:
+# ==========================================
+# RULE 1: CloudTask Management
+# Allow tenants to manage their own CloudTask resources
+# ==========================================
+- apiGroups:
+  - "tasks.orchestrator.dev"  # Custom API group for CloudTasks
+  resources:
+  - "cloudtasks"              # Full CRUD on CloudTask resources
+  - "cloudtasks/status"       # Allow updating task status
+  verbs:
+  - "create"                  # Create new tasks
+  - "get"                     # Get individual task
+  - "list"                    # List all tasks in namespace
+  - "watch"                   # Watch for task changes
+  - "update"                  # Update task spec/metadata
+  - "patch"                   # Patch specific fields
+  - "delete"                  # Delete tasks
+  - "deletecollection"        # Delete multiple tasks at once
+
+# ==========================================
+# RULE 2: Pod Viewing (Read-only)
+# Allow tenants to view pods created by operator for their tasks
+# NOTE: Cannot directly create pods - operator creates them from CloudTask spec
+# ==========================================
+- apiGroups:
+  - ""  # Core API group (v1)
+  resources:
+  - "pods"                    # Read pods that operator created
+  - "pods/log"                # Access pod logs for debugging
+  - "pods/status"             # View pod status
+  verbs:
+  - "get"                     # Get individual pod
+  - "list"                    # List pods in namespace
+  - "watch"                   # Watch pod updates
+  - "describe"                # Describe pods (implied by get)
+
+# ==========================================
+# RULE 3: Event Viewing
+# Allow tenants to see events for debugging and monitoring
+# ==========================================
+- apiGroups:
+  - ""  # Core API group (v1)
+  resources:
+  - "events"                  # Audit and debugging events
+  verbs:
+  - "get"                     # Get individual event
+  - "list"                    # List events in namespace
+  - "watch"                   # Watch new events
+
+# ==========================================
+# RULE 4: ConfigMap Reading
+# Allow tenants to read ConfigMaps for task configuration
+# ==========================================
+- apiGroups:
+  - ""  # Core API group (v1)
+  resources:
+  - "configmaps"              # Task configuration storage
+  verbs:
+  - "get"                     # Get individual ConfigMap
+  - "list"                    # List ConfigMaps in namespace
+  - "watch"                   # Watch ConfigMap changes
+
+# ==========================================
+# RULE 5: Secret Reading (Optional)
+# Allow tenants to read Secrets (e.g., credentials)
+# Remove if secrets are managed centrally
+# ==========================================
+- apiGroups:
+  - ""  # Core API group (v1)
+  resources:
+  - "secrets"                 # For task credentials/tokens
+  verbs:
+  - "get"                     # Get individual secret
+  - "list"                    # List secrets
+
+# ==========================================
+# RULE 6: ServiceAccount Viewing
+# Allow viewing service accounts in the namespace
+# ==========================================
+- apiGroups:
+  - ""  # Core API group (v1)
+  resources:
+  - "serviceaccounts"
+  verbs:
+  - "get"                     # View own service account
+  - "list"                    # List service accounts
+
+# ==========================================
+# RULE 7: PersistentVolumeClaim Management
+# Allow tenants to create and manage PVCs for task storage
+# ==========================================
+- apiGroups:
+  - ""  # Core API group (v1)
+  resources:
+  - "persistentvolumeclaims"   # Storage volumes
+  verbs:
+  - "create"                  # Create PVC
+  - "get"                     # Get PVC details
+  - "list"                    # List PVCs
+  - "watch"                   # Watch PVC changes
+  - "update"                  # Update PVC
+  - "delete"                  # Delete PVC
+
+# ==========================================
+# RULE 8: NetworkPolicy Viewing
+# Allow tenants to view namespace network policies
+# ==========================================
+- apiGroups:
+  - "networking.k8s.io"
+  resources:
+  - "networkpolicies"
+  verbs:
+  - "get"                     # View network policies
+  - "list"                    # List network policies
+
+# ==========================================
+# DEFAULT DENIED (Kubernetes RBAC Principle)
+# Anything not explicitly listed above is denied by default
+# ==========================================
+# - Tenant cannot read/write Roles, RoleBindings
+# - Tenant cannot read cluster-level resources (Nodes, PersistentVolumes)
+# - Tenant cannot access other namespaces
+# - Tenant cannot create deployments, statefulsets, daemonsets, etc.
+# - Tenant cannot access ingress or load balancers
+# - Tenant cannot read resource quotas or limit ranges

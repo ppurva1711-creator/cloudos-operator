@@ -1,0 +1,190 @@
+# Loki Stack Helm Values for CloudTask Orchestrator
+# Combines Loki (log aggregation), Promtail (log collection), and Grafana integration
+
+loki:
+  enabled: true
+  loki:
+    # Auth configuration for multi-tenant setup
+    auth_enabled: true
+    
+    # Ingestion limits
+    limits_config:
+      # Allow up to 10MB of log stream per tenant
+      max_streams_per_user: 10000
+      max_stream_matchers_per_user: 100
+      ingestion_rate_mb: 20
+      ingestion_burst_size_mb: 30
+      # Maximum retention period (7 days)
+      max_retention_period: "168h"
+      # Enforce label names
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: "168h"
+
+    # Storage configuration
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /loki/boltdb-shipper-active
+        cache_location: /loki/boltdb-shipper-cache
+        shared_store: filesystem
+      filesystem:
+        directory: /loki/chunks
+
+    # Schema configuration
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: boltdb_shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+
+    # Server configuration
+    server:
+      http_listen_port: 3100
+      log_level: info
+
+    # Ingestion configuration
+    ingestion_config:
+      rate_limit_enabled: true
+      rate_limit_mb: 10
+      burst_size_mb: 20
+
+  # Persistence configuration
+  persistence:
+    enabled: true
+    storageClassName: standard
+    size: 5Gi
+    
+  # Resource requests and limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 3100
+
+  # Pod security context
+  podSecurityContext:
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsNonRoot: true
+
+promtail:
+  enabled: true
+  # Run on every node as DaemonSet
+  DaemonSet:
+    enabled: true
+
+  # Promtail configuration
+  config:
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+        # Batch settings for efficient log shipping
+        batch_size: 1048576
+        timeout: 1s
+        # Tenant ID for multi-tenant setup
+        tenant_id: "cloudtask"
+
+    # Positions file to track log reading state
+    positions:
+      filename: /tmp/positions.yaml
+
+    # Server configuration
+    server:
+      http_listen_port: 3101
+      log_level: info
+
+    # Target configuration - collect logs from multiple namespaces
+    scrape_configs:
+      # CloudTask Operator and API Gateway logs
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # Keep only logs from monitored namespaces
+          - source_labels: [__meta_kubernetes_namespace]
+            action: keep
+            regex: 'orchestrator-system|module2-system|monitoring'
+          
+          # Add pod labels
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            target_label: component
+          
+          # Extract tenant_id if available
+          - source_labels: [__meta_kubernetes_pod_label_tenant_id]
+            target_label: tenant_id
+          
+          # Add pod owner information
+          - source_labels: [__meta_kubernetes_pod_owner_name]
+            target_label: pod_owner
+          - source_labels: [__meta_kubernetes_pod_owner_kind]
+            target_label: owner_kind
+
+      # System logs from nodes
+      - job_name: journal
+        journal:
+          path: /var/log/journal
+          labels:
+            job: systemd-journal
+        relabel_configs:
+          - source_labels: ['__journal_hostname']
+            target_label: 'hostname'
+
+  # Resource requests and limits
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+
+  # Service account configuration
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: null
+
+  # Pod security context
+  podSecurityContext:
+    runAsUser: 0
+    runAsNonRoot: false
+
+  # Tolerations for node taints (to run on all nodes including control plane)
+  tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+
+grafana:
+  # Grafana integration (handled separately if already running)
+  enabled: false
+
+# Namespace configuration
+namespace:
+  create: true
+
+# Monitoring/Metrics configuration (Prometheus integration)
+monitoring:
+  enabled: false
+  namespace: monitoring

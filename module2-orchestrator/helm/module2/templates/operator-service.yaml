@@ -1,0 +1,24 @@
+{{- if .Values.operator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "module2.fullname" . }}-operator
+  namespace: {{ include "module2.namespace" . }}
+  labels:
+    {{- include "module2.labels" . }}
+    app: cloudtask-operator
+spec:
+  type: {{ .Values.operator.service.type }}
+  ports:
+  - port: {{ .Values.operator.service.port }}
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  - port: {{ .Values.operator.service.healthPort }}
+    targetPort: health
+    protocol: TCP
+    name: health
+  selector:
+    {{- include "module2.selectorLabels" . }}
+    app: cloudtask-operator
+{{- end }}

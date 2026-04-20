@@ -1,0 +1,220 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: module2-system
+  labels:
+    app: redis
+    component: cache-store
+    managed-by: cloudtask-operator
+    version: "7.2"
+  annotations:
+    description: "Redis 7.2 cache and session store for CloudTask Orchestrator"
+    created-date: "2026-04-19"
+    documentation: "https://redis.io/docs"
+
+spec:
+  # Single replica for now (can scale to multi-node with Redis Sentinel later)
+  replicas: 1
+  
+  strategy:
+    type: Recreate  # Recreate strategy (not RollingUpdate) for single persistent storage
+  
+  selector:
+    matchLabels:
+      app: redis
+  
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: cache-store
+        managed-by: cloudtask-operator
+      annotations:
+        prometheus.io/scrape: "false"  # Add prometheus scrape if Redis exporter added
+        prometheus.io/port: "6379"
+    
+    spec:
+      # Don't schedule on control plane
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: DoesNotExist
+      
+      # Pod restart policy
+      restartPolicy: Always
+      
+      # Service Account (default for now)
+      serviceAccountName: default
+      
+      # DNS policies
+      dnsPolicy: ClusterFirst
+      
+      # Grace period for graceful shutdown
+      terminationGracePeriodSeconds: 30
+      
+      # Security context for pod
+      securityContext:
+        runAsNonRoot: false  # Redis needs to run as root in this config
+        fsGroup: 999  # Group ID for filesystem
+      
+      # Containers
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        imagePullPolicy: IfNotPresent
+        
+        # Redis command override
+        command:
+          - redis-server
+          - /usr/local/etc/redis/redis.conf
+          - --requirepass
+          - $(REDIS_PASSWORD)
+        
+        # Environment variables
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-password
+              key: password
+        
+        # Ports
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+        
+        # Security context for container
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+        
+        # Volume mounts
+        volumeMounts:
+        # Mount configuration from ConfigMap
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+          readOnly: true
+        
+        # Mount persistent storage for data
+        - name: redis-data
+          mountPath: /data
+        
+        # Mount health check scripts
+        - name: health-scripts
+          mountPath: /healthcheck
+          readOnly: true
+        
+        # Liveness probe - checks if Redis is still alive
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - /healthcheck/health-check.sh
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Readiness probe - checks if Redis is ready to accept connections
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - /healthcheck/health-check.sh
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 2
+        
+        # Startup probe - for slower startups (optional)
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - /healthcheck/health-check.sh
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30  # Up to 300s for startup
+        
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: 100m          # Request 0.1 CPU
+            memory: 128Mi      # Request 128Mi RAM
+            ephemeral-storage: 100Mi
+          limits:
+            cpu: 500m          # Limit to 0.5 CPU
+            memory: 512Mi      # Limit to 512Mi RAM
+            ephemeral-storage: 500Mi
+        
+        # Lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - redis-cli SHUTDOWN SAVE
+          # postStart can be used to initialize data if needed
+      
+      # Volumes
+      volumes:
+      # ConfigMap volume for Redis configuration
+      - name: redis-config
+        configMap:
+          name: redis-config
+          defaultMode: 0644
+          items:
+          - key: redis.conf
+            path: redis.conf
+      
+      # PVC volume for persistent storage
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data
+      
+      # ConfigMap for health check scripts
+      - name: health-scripts
+        configMap:
+          name: redis-health-scripts
+          defaultMode: 0755
+          items:
+          - key: health-check.sh
+            path: health-check.sh
+
+---
+# ServiceMonitor for Prometheus (optional, for monitoring)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-prometheus-exporter-config
+  namespace: module2-system
+  labels:
+    app: redis
+    component: monitoring
+    managed-by: cloudtask-operator
+  annotations:
+    description: "Prometheus exporter configuration for Redis (optional)"
+    status: "placeholder-for-future-monitoring"
+
+data:
+  # Placeholder for Redis Prometheus exporter configuration
+  exporter-config.yaml: |
+    # Redis Prometheus exporter would be configured here
+    # Example: redis-exporter --redis-addr=redis.module2-system:6379

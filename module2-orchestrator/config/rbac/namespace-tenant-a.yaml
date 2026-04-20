@@ -1,0 +1,91 @@
+﻿apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-tenant-a  # Replace tenant-a with actual tenant ID (e.g., tenant-a, tenant-b)
+  labels:
+    # Core identification labels
+    tenant-id: "tenant-a"
+    managed-by: "cloudtask-operator"
+    environment: "production"  # Can be overridden: production, staging, development
+    
+    # Additional organizational labels
+    app: "cloudtask"
+    component: "tenant-namespace"
+    version: "v1"
+  annotations:
+    # Metadata annotations
+    description: "CloudTask namespace for tenant tenant-a"
+    contact: "devops@company.com"  # Update with your contact info
+    created-by: "cloudtask-orchestrator"
+    created-date: "2026-04-19"  # Update as needed
+    
+    # Additional governance annotations
+    "policy.cloudtask.orchestrator.dev/quota-tier": "standard"  # Options: standard, premium, enterprise
+    "policy.cloudtask.orchestrator.dev/isolation-level": "strong"  # Options: standard, strong, maximum
+    "security.cloudtask.orchestrator.dev/network-policy": "enabled"
+    "backup.cloudtask.orchestrator.dev/enabled": "true"
+    "backup.cloudtask.orchestrator.dev/schedule": "daily"
+    "cost-center": "engineering"  # Replace with your cost center code
+    "billing-account": "account-tenant-a"
+
+---
+# NetworkPolicy for tenant isolation (optional but recommended)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-network-policy
+  namespace: tenant-tenant-a
+  labels:
+    tenant-id: "tenant-a"
+    managed-by: "cloudtask-operator"
+spec:
+  # Deny all ingress by default
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # Allow ingress from same tenant namespace
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          tenant-id: "tenant-a"
+    - podSelector: {}
+  
+  # Allow ingress from operator namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          app: "cloudtask-operator"
+  
+  # Allow egress to same namespace
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          tenant-id: "tenant-a"
+  
+  # Allow egress to kube-system for DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53  # DNS
+  
+  # Allow egress to external HTTPS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow egress to external HTTP (be restrictive in production)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 80
+

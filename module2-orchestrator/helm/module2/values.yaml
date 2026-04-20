@@ -1,0 +1,248 @@
+# CloudTask Orchestrator - Default Values
+# Override these values with environment-specific files
+
+# Global settings
+global:
+  namespace: orchestrator-system
+  imagePullPolicy: IfNotPresent
+  environment: production
+
+# Operator Configuration
+operator:
+  enabled: true
+  image:
+    repository: cloudtask-operator
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicas: 1
+  
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Environment variables for operator
+  env:
+    LOG_LEVEL: info
+    ENABLE_WEBHOOKS: "true"
+    METRICS_ADDR: ":8080"
+    HEALTH_PROBE_ADDR: ":8081"
+    LEADER_ELECTION: "false"
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8080
+    healthPort: 8081
+    metricsPort: 8080
+  
+  # Pod security and node selector
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  
+  nodeSelector: {}
+  
+  tolerations: []
+  
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - cloudtask-operator
+            topologyKey: kubernetes.io/hostname
+
+# API Gateway Configuration
+gateway:
+  enabled: true
+  image:
+    repository: cloudtask-gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicas: 1
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Environment variables for gateway
+  env:
+    PORT: "8000"
+    LOG_LEVEL: info
+    JWT_ALGORITHM: "HS256"
+    REDIS_ADDR: "redis.module2-system:6379"
+    POSTGRES_HOST: "postgresql.module2-system"
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: "cloudtask"
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  
+  # Pod security
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  
+  nodeSelector: {}
+  
+  tolerations: []
+  
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - api-gateway
+            topologyKey: kubernetes.io/hostname
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  
+  host: cloudtask.local
+  path: /
+  pathType: Prefix
+  
+  tls:
+    enabled: false
+    issuer: "letsencrypt-prod"
+    certName: "cloudtask-tls"
+
+# Redis Configuration
+redis:
+  enabled: true
+  architecture: standalone
+  
+  auth:
+    enabled: true
+    password: "change-me-in-production"
+  
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClassName: standard
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  service:
+    type: ClusterIP
+    port: 6379
+
+# PostgreSQL Configuration
+postgresql:
+  enabled: true
+  
+  auth:
+    username: cloudtask
+    password: "change-me-in-production"
+    database: cloudtask
+  
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClassName: standard
+  
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  service:
+    type: ClusterIP
+    port: 5432
+
+# ServiceAccount Configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC Configuration
+rbac:
+  create: true
+
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: false
+  operator:
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  gateway:
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    scrapeInterval: 15s
+    retention: 15d
+  grafana:
+    enabled: true
+    dashboards: true
+
+# Network Policy Configuration
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# ConfigMaps for logging configuration
+logConfig:
+  enabled: true
+  logLevel: info
+  jsonLogging: true
+
+# Labels to apply to all resources
+commonLabels:
+  app.kubernetes.io/name: cloudtask
+  app.kubernetes.io/part-of: module2-orchestrator

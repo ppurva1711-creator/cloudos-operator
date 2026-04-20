@@ -1,0 +1,86 @@
+# Module 1 Scheduler Service Configuration
+# This service abstracts the Module 1 scheduler endpoint.
+# Switch between real and mock Module 1 by changing the ServiceType or ExternalName below.
+#
+# For Real Module 1 (external to cluster):
+#   - Use ExternalName service pointing to the real Module 1 address
+#   - Example: ExternalName: module1-scheduler.example.com
+#
+# For Mock Module 1 (inside cluster):
+#   - Use ClusterIP service pointing to mock scheduler pod
+#   - Example: selector matches mock-scheduler deployment
+#
+# Usage:
+#   # Switch to real Module 1 (external)
+#   kubectl apply -f config/integration/module1-service-real.yaml
+#
+#   # Switch to mock Module 1 (internal)
+#   kubectl apply -f config/integration/module1-service-mock.yaml
+#
+#   # Or update this file manually and apply:
+#   kubectl apply -f config/integration/module1-service.yaml
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: module1-scheduler
+  namespace: orchestrator-system
+  labels:
+    app: module1-scheduler
+    version: v1
+spec:
+  type: ExternalName
+  # For real external Module 1, change this to the actual address
+  # Example values:
+  #   - module1.prod.example.com (if hosted externally)
+  #   - 192.168.1.50 (if on same network with port)
+  # If Module 1 is inside the cluster, change type to ClusterIP and add selector instead
+  externalName: module1-scheduler.external  # Replace with actual Module 1 address
+  ports:
+  - name: grpc
+    port: 50051
+    protocol: TCP
+    targetPort: 50051
+  sessionAffinity: None
+
+---
+# Alternative: Service for mock Module 1 (inside cluster)
+# Uncomment this and comment out the ExternalName service above to use mock
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: module1-scheduler
+#   namespace: orchestrator-system
+#   labels:
+#     app: module1-scheduler
+#     version: v1-mock
+# spec:
+#   type: ClusterIP
+#   selector:
+#     app: mock-scheduler
+#     control-plane: mock-scheduler
+#   ports:
+#   - name: grpc
+#     port: 50051
+#     protocol: TCP
+#     targetPort: 50051
+#   sessionAffinity: None
+
+---
+# ServiceMonitor for Prometheus (optional)
+# Only if you have Prometheus Operator installed
+kind: ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+metadata:
+  name: module1-scheduler
+  namespace: orchestrator-system
+  labels:
+    app: module1-scheduler
+spec:
+  selector:
+    matchLabels:
+      app: module1-scheduler
+  endpoints:
+  - port: grpc
+    interval: 30s

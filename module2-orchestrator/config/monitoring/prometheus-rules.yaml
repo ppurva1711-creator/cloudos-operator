@@ -1,0 +1,261 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudtask-operator-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: cloudtask.operator.rules
+      interval: 15s
+      rules:
+        # Alert: High Queue Depth
+        - alert: HighQueueDepth
+          expr: |
+            cloudtask_queue_depth > 100
+          for: 5m
+          labels:
+            severity: warning
+            component: operator
+          annotations:
+            summary: "High queue depth detected"
+            description: "CloudTask queue depth is {{ $value }} (threshold: 100). Consider scaling up workers."
+            runbook_url: "https://internal-docs/runbooks/high-queue-depth"
+
+        # Alert: CloudTask Operator Down
+        - alert: OperatorDown
+          expr: |
+            up{job="cloudtask-operator-metrics"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: operator
+          annotations:
+            summary: "CloudTask Operator is down"
+            description: "CloudTask Operator pod in {{ $labels.namespace }} is not responding."
+            runbook_url: "https://internal-docs/runbooks/operator-down"
+
+        # Alert: High Task Failure Rate
+        - alert: HighTaskFailureRate
+          expr: |
+            (
+              rate(cloudtask_failed_total[5m])
+              /
+              (rate(cloudtask_completed_total[5m]) + rate(cloudtask_failed_total[5m]))
+            ) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            component: operator
+          annotations:
+            summary: "High task failure rate"
+            description: "Task failure rate is {{ $value | humanizePercentage }} (threshold: 5%) over the last 10 minutes."
+            runbook_url: "https://internal-docs/runbooks/high-failure-rate"
+
+        # Alert: Pod Scaling Limit
+        - alert: PodScalingLimit
+          expr: |
+            kube_deployment_status_replicas{deployment="cloudtask-operator"}
+            >=
+            kube_deployment_spec_replicas{deployment="cloudtask-operator"}
+          for: 15m
+          labels:
+            severity: warning
+            component: operator
+          annotations:
+            summary: "Pod scaling limit reached"
+            description: "Operator deployment is at max replicas ({{ $value }}). Unable to scale further."
+            runbook_url: "https://internal-docs/runbooks/scaling-limit"
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudtask-gateway-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: cloudtask.gateway.rules
+      interval: 15s
+      rules:
+        # Alert: API Gateway Down
+        - alert: APIGatewayDown
+          expr: |
+            up{job="api-gateway-metrics"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "API Gateway is down"
+            description: "API Gateway in {{ $labels.namespace }} is not responding."
+            runbook_url: "https://internal-docs/runbooks/gateway-down"
+
+        # Alert: High HTTP Error Rate
+        - alert: HighHTTPErrorRate
+          expr: |
+            (
+              rate(http_requests_total{status=~"5.."}[5m])
+              /
+              rate(http_requests_total[5m])
+            ) > 0.01
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "High HTTP error rate on API Gateway"
+            description: "HTTP 5xx error rate is {{ $value | humanizePercentage }} (threshold: 1%) over the last 5 minutes."
+            runbook_url: "https://internal-docs/runbooks/gateway-error-rate"
+
+        # Alert: High Request Latency
+        - alert: HighRequestLatency
+          expr: |
+            histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "High request latency on API Gateway"
+            description: "p95 request latency is {{ $value }} seconds (threshold: 1.0s)."
+            runbook_url: "https://internal-docs/runbooks/gateway-latency"
+
+        # Alert: High Active Connections
+        - alert: HighActiveConnections
+          expr: |
+            active_connections > 1000
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "High number of active connections"
+            description: "Active connections: {{ $value }} (threshold: 1000)."
+            runbook_url: "https://internal-docs/runbooks/active-connections"
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudtask-infrastructure-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: cloudtask.infrastructure.rules
+      interval: 15s
+      rules:
+        # Alert: Redis Down
+        - alert: RedisDown
+          expr: |
+            up{job="redis-metrics"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: redis
+          annotations:
+            summary: "Redis is down"
+            description: "Redis instance in {{ $labels.namespace }} is not responding."
+            runbook_url: "https://internal-docs/runbooks/redis-down"
+
+        # Alert: PostgreSQL Down
+        - alert: PostgreSQLDown
+          expr: |
+            up{job="postgres-metrics"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: postgres
+          annotations:
+            summary: "PostgreSQL is down"
+            description: "PostgreSQL instance in {{ $labels.namespace }} is not responding."
+            runbook_url: "https://internal-docs/runbooks/postgres-down"
+
+        # Alert: High PostgreSQL Connections
+        - alert: HighPostgresConnections
+          expr: |
+            pg_stat_activity_count > 80
+          for: 5m
+          labels:
+            severity: warning
+            component: postgres
+          annotations:
+            summary: "High PostgreSQL connections"
+            description: "PostgreSQL active connections: {{ $value }} (threshold: 80)."
+            runbook_url: "https://internal-docs/runbooks/postgres-connections"
+
+        # Alert: High Redis Memory Usage
+        - alert: HighRedisMemoryUsage
+          expr: |
+            (redis_memory_used_bytes / redis_memory_max_bytes) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            component: redis
+          annotations:
+            summary: "High Redis memory usage"
+            description: "Redis memory usage: {{ $value | humanizePercentage }} (threshold: 85%)."
+            runbook_url: "https://internal-docs/runbooks/redis-memory"
+
+        # Alert: Pod Restart Storm
+        - alert: PodRestartStorm
+          expr: |
+            rate(pod_restarts_total[15m]) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            component: "{{ $labels.pod }}"
+          annotations:
+            summary: "Pod restart storm detected"
+            description: "Pod {{ $labels.pod }} is restarting {{ $value }} times per minute."
+            runbook_url: "https://internal-docs/runbooks/pod-restart-storm"
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudtask-recording-rules
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack
+    role: recording-rules
+spec:
+  groups:
+    - name: cloudtask.recording.rules
+      interval: 15s
+      rules:
+        # Task completion rate
+        - record: cloudtask:completion_rate:5m
+          expr: rate(cloudtask_completed_total[5m])
+
+        # Task failure rate
+        - record: cloudtask:failure_rate:5m
+          expr: rate(cloudtask_failed_total[5m])
+
+        # Total task throughput
+        - record: cloudtask:throughput:5m
+          expr: rate(cloudtask_created_total[5m])
+
+        # Average task duration
+        - record: cloudtask:duration:avg:5m
+          expr: avg(cloudtask_duration_seconds_sum[5m]) / avg(cloudtask_duration_seconds_count[5m])
+
+        # HTTP request rate by status
+        - record: http:request_rate:5m
+          expr: rate(http_requests_total[5m])
+
+        # HTTP request error rate
+        - record: http:error_rate:5m
+          expr: rate(http_requests_total{status=~"5.."}[5m])
+
+        # Average HTTP latency
+        - record: http:latency:avg:5m
+          expr: avg(http_request_duration_seconds_sum[5m]) / avg(http_request_duration_seconds_count[5m])

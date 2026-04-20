@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: module2-system
+  labels:
+    app: redis
+    component: storage
+    managed-by: cloudtask-operator
+    version: "7.2"
+  annotations:
+    description: "Persistent storage for Redis data (RDB and AOF files)"
+    created-date: "2026-04-19"
+    backup-required: "true"
+    retention-days: "30"
+
+spec:
+  # ReadWriteOnce: can be mounted by a single node
+  accessModes:
+    - ReadWriteOnce
+  
+  # Use the default storage class provided by Kind (standard)
+  storageClassName: standard
+  
+  # Request 2Gi of storage
+  resources:
+    requests:
+      storage: 2Gi

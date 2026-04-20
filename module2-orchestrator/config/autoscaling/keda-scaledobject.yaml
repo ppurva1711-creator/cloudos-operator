@@ -1,0 +1,49 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: cloudtask-operator-keda-scaler
+  namespace: orchestrator-system
+  labels:
+    app: cloudtask-operator
+    component: keda-scaler
+spec:
+  scaleTargetRef:
+    name: cloudtask-operator
+    kind: Deployment
+  minReplicaCount: 2
+  maxReplicaCount: 100
+  cooldownPeriod: 300
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  triggers:
+    - type: redis
+      metadata:
+        address: "redis.module2-system:6379"
+        listName: "tasks:pending"
+        listLength: "10"
+        databaseIndex: "0"
+        ignoreNilValues: "true"
+      authenticationRef:
+        name: keda-redis-auth
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+      selectPolicy: Max

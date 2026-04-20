@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orchestrator-system
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudtask-operator
+  namespace: orchestrator-system
+  labels:
+    app: cloudtask-operator
+    version: v1.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudtask-operator
+  template:
+    metadata:
+      labels:
+        app: cloudtask-operator
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: cloudtask-operator
+      securityContext:
+        fsGroup: 65532
+      containers:
+      - name: operator
+        image: cloudtask-operator:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        - name: ENABLE_WEBHOOKS
+          value: "false"
+        - name: LEADER_ELECT
+          value: "false"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+            - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cloudtask-operator
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudtask-operator-metrics
+  namespace: orchestrator-system
+  labels:
+    app: cloudtask-operator
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: cloudtask-operator
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudtask-operator-health
+  namespace: orchestrator-system
+  labels:
+    app: cloudtask-operator
+spec:
+  ports:
+  - name: health
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  selector:
+    app: cloudtask-operator

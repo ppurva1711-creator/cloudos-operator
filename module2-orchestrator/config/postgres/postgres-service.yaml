@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: module2-system
+  labels:
+    app: postgres
+    component: database
+    managed-by: cloudtask-operator
+  annotations:
+    description: "PostgreSQL service for CloudTask task history"
+    prometheus.io/probe: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for direct pod access
+  selector:
+    app: postgres
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: postgresql
+    protocol: TCP

@@ -1,0 +1,115 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cloudtask-load-test
+  namespace: tenant-a
+  labels:
+    purpose: load-test
+    app: cloudtask
+spec:
+  parallelism: 10
+  completions: 500
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300  # Auto cleanup after 5 minutes
+  template:
+    metadata:
+      labels:
+        purpose: load-test
+        app: cloudtask
+    spec:
+      serviceAccountName: cloudtask-operator
+      containers:
+      - name: task-creator
+        image: bitnami/kubectl:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: NAMESPACE
+          value: "tenant-a"
+        - name: TASK_INDEX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+        command:
+        - /bin/sh
+        - -c
+        - |
+          #!/bin/sh
+          set -e
+          
+          # Generate unique task name
+          TASK_ID=$((RANDOM * 32768 + RANDOM))
+          TASK_NAME="load-test-task-${TASK_ID}"
+          
+          # Random sleep duration: 1-5 seconds
+          SLEEP_DURATION=$((1 + RANDOM % 5))
+          
+          # Create CloudTask resource
+          cat << 'EOF' | kubectl apply -f -
+          apiVersion: tasks.orchestrator.dev/v1
+          kind: CloudTask
+          metadata:
+            name: ${TASK_NAME}
+            namespace: ${NAMESPACE}
+            labels:
+              purpose: load-test
+              test-run: "load-test-batch"
+          spec:
+            image: "busybox:latest"
+            command:
+              - /bin/sh
+              - -c
+              - |
+                echo "Task ${TASK_NAME} starting..."
+                sleep ${SLEEP_DURATION}
+                echo "Task ${TASK_NAME} completed successfully"
+                exit 0
+            retryPolicy:
+              maxRetries: 2
+              backoffMultiplier: 1.5
+              initialDelaySeconds: 5
+            timeoutSeconds: 15
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "64Mi"
+              limits:
+                cpu: "200m"
+                memory: "128Mi"
+          EOF
+          
+          echo "Created task: ${TASK_NAME}"
+      restartPolicy: Never
+---
+# ServiceAccount for task creator
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudtask-operator
+  namespace: tenant-a
+---
+# ClusterRole for task creation
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudtask-load-test-creator
+rules:
+- apiGroups: ["tasks.orchestrator.dev"]
+  resources: ["cloudtasks"]
+  verbs: ["create", "get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "get", "list", "watch"]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudtask-load-test-creator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudtask-load-test-creator
+subjects:
+- kind: ServiceAccount
+  name: cloudtask-operator
+  namespace: tenant-a

@@ -1,0 +1,81 @@
+# CloudTask Orchestrator - Development Environment Values
+# Override default values for development
+
+global:
+  environment: development
+
+# Operator - Single replica with minimal resources
+operator:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  env:
+    LOG_LEVEL: debug
+    ENABLE_WEBHOOKS: "true"
+
+# Gateway - Single replica with minimal resources
+gateway:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  env:
+    LOG_LEVEL: debug
+
+# Ingress configuration for development
+ingress:
+  enabled: true
+  host: cloudtask.local
+  tls:
+    enabled: false
+
+# No autoscaling in development
+autoscaling:
+  enabled: false
+  operator:
+    minReplicas: 1
+    maxReplicas: 3
+  gateway:
+    minReplicas: 1
+    maxReplicas: 3
+
+# Minimal monitoring in development
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false
+
+# Reduced storage for dev
+redis:
+  master:
+    persistence:
+      size: 1Gi
+
+postgresql:
+  primary:
+    persistence:
+      size: 5Gi
+
+# Network policy disabled in dev
+networkPolicy:
+  enabled: false
+
+# Pod disruption budget disabled in dev
+podDisruptionBudget:
+  enabled: false
+
+# Development-friendly logging
+logConfig:
+  logLevel: debug
+  jsonLogging: true
